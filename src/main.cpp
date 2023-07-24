@@ -1,5 +1,5 @@
 
-#include <SimpleFOC.h>
+#include <SimpleFOCUno.h>
 
 // BLDC motor & driver instance
 BLDCMotor motor = BLDCMotor(11);
