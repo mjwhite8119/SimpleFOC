@@ -8,18 +8,13 @@ BLDCMotor motor = BLDCMotor(7); // Gimbal motor
 // BLDCDriver3PWM driver = BLDCDriver3PWM(pwmA, pwmB, pwmC, Enable(optional));
 BLDCDriver3PWM driver = BLDCDriver3PWM(9, 5, 6, 8);
 
-// Stepper motor & driver instance
-//StepperMotor motor = StepperMotor(50);
-//StepperDriver4PWM driver = StepperDriver4PWM(9, 5, 10, 6,  8);
-
-
 //target variable
-float target_velocity = 2;
+float target_velocity = 0;
 
 // instantiate the commander
-// Commander command = Commander(Serial);
-// void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
-// void doLimit(char* cmd) { command.scalar(&motor.voltage_limit, cmd); }
+Commander command = Commander(Serial);
+void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
+void doLimit(char* cmd) { command.scalar(&motor.voltage_limit, cmd); }
 
 void setup() {
 
@@ -47,8 +42,8 @@ void setup() {
   motor.init();
 
   // add target command T
-  // command.add('T', doTarget, "target velocity");
-  // command.add('L', doLimit, "voltage limit");
+  command.add('T', doTarget, "target velocity");
+  command.add('L', doLimit, "voltage limit");
 
   Serial.begin(115200);
   Serial.println("Motor ready!");
@@ -63,5 +58,5 @@ void loop() {
   motor.move(target_velocity);
 
   // user communication
-  // command.run();
+  command.run();
 }
