@@ -8,13 +8,31 @@ BLDCMotor motor = BLDCMotor(7); // Gimbal motor
 // BLDCDriver3PWM driver = BLDCDriver3PWM(pwmA, pwmB, pwmC, Enable(optional));
 BLDCDriver3PWM driver = BLDCDriver3PWM(9, 5, 6, 8);
 
-//target variable
+//target variables
 float target_velocity = 0;
+float target_position = 0;
+// Velocity 0, Position 1
+float mode = 0; 
 
 // instantiate the commander
 Commander command = Commander(Serial);
-void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
-void doLimit(char* cmd) { command.scalar(&motor.voltage_limit, cmd); }
+void doTargetVelocity(char* cmd) { command.scalar(&target_velocity, cmd); }
+void doTargetPosition(char* cmd) { command.scalar(&target_position, cmd); }
+void doMode(char* cmd) { command.scalar(&mode, cmd); Serial.print("Mode ");Serial.println(mode);}
+
+void doVoltageLimit(char* cmd) { command.scalar(&motor.voltage_limit, cmd); }
+void doVelocityLimit(char* cmd) { command.scalar(&motor.velocity_limit, cmd); }
+
+void moveMode() {
+  if (mode == 0) {
+    motor.controller = MotionControlType::velocity_openloop;
+    motor.move(target_velocity);
+  }
+  else {
+    motor.controller = MotionControlType::angle_openloop;
+    motor.move(target_position);
+  } 
+}
 
 void setup() {
 
@@ -37,17 +55,28 @@ void setup() {
  
   // open loop control config
   motor.controller = MotionControlType::velocity_openloop;
+  // motor.controller = MotionControlType::angle_openloop;
 
   // init motor hardware
   motor.init();
 
   // add target command T
-  command.add('T', doTarget, "target velocity");
-  command.add('L', doLimit, "voltage limit");
+  command.add('V', doTargetVelocity, "target velocity");
+  command.add('P', doTargetPosition, "target angle");
+  command.add('M', doMode, "mode");
+
+  command.add('L', doVoltageLimit, "voltage limit");
+  command.add('S', doVelocityLimit, "velocity limit");
+
 
   Serial.begin(115200);
   Serial.println("Motor ready!");
-  Serial.println("Set target velocity [rad/s]");
+  if (mode == 0) {
+    Serial.println("Set target velocity [rad/s]");
+  } else {
+    Serial.println("Set target position [rad]");
+  }
+  
   _delay(1000);
 }
 
@@ -55,7 +84,9 @@ void loop() {
 
   // open loop velocity movement
   // using motor.voltage_limit and motor.velocity_limit
-  motor.move(target_velocity);
+  // motor.move(target_velocity);
+  // motor.move(target_position);
+  moveMode();
 
   // user communication
   command.run();
