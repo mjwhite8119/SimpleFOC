@@ -1,31 +1,33 @@
 /**
+ * Utility arduino sketch which finds pole pair number of the motor
  *
- * Position/angle motion control example
- * Steps:
- * 1) Configure the motor and magnetic sensor
- * 2) Run the code
- * 3) Set the target angle (in radians) from serial terminal
+ * To run it just set the correct pin numbers for the BLDC driver and sensor CPR value and chip select pin.
  *
+ * The program will rotate your motor a specific amount and check how much it moved, and by doing a simple calculation calculate your pole pair number.
+ * The pole pair number will be outputted to the serial terminal.
+ *
+ * If the pole pair number is well estimated your motor will start to spin in voltage mode with 2V target.
+ *
+ * If the code calculates negative pole pair number please invert your motor connector.
+ *
+ * Try running this code several times to avoid statistical errors.
+ * > But in general if your motor spins, you have a good pole pairs number.
  */
 #include <SimpleFOC.h>
 
-// magnetic sensor instance - SPI
-// MagneticSensorSPI sensor = MagneticSensorSPI(AS5147_SPI, 10);
-// magnetic sensor instance - MagneticSensorI2C
-MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C);
-
-// magnetic sensor instance - analog output
-// MagneticSensorAnalog sensor = MagneticSensorAnalog(A1, 14, 1020);
-
-// BLDC motor & driver instance
-BLDCMotor motor = BLDCMotor(7); // Gimbal motor
+// BLDC motor instance
+// its important to put pole pairs number as 1!!!
+BLDCMotor motor = BLDCMotor(1);
 BLDCDriver3PWM driver = BLDCDriver3PWM(9, 5, 6, 8);
 
-// angle set point variable
-float target_angle = 0;
+MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C);
+
+// voltage set point variable
+float target_voltage = 2;
+
 // instantiate the commander
 Commander command = Commander(Serial);
-void doTarget(char* cmd) { command.scalar(&target_angle, cmd); }
+void doTarget(char* cmd) { command.scalar(&target_voltage, cmd); }
 
 void setup() {
 
@@ -34,57 +36,94 @@ void setup() {
   // link the motor to the sensor
   motor.linkSensor(&sensor);
 
-  // driver config
-  // power supply voltage [V]
-  driver.voltage_power_supply = 8;
+  // power supply voltage
+  // default 12V
+  driver.voltage_power_supply = 12;
   driver.init();
-  // link the motor and the driver
   motor.linkDriver(&driver);
 
-  // choose FOC modulation (optional)
-  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
-
-  // set motion control loop to be used
-  motor.controller = MotionControlType::angle;
-
-  // contoller configuration
-  // default parameters in defaults.h
-
-  // velocity PI controller parameters
-  motor.PID_velocity.P = 0.2f;
-  motor.PID_velocity.I = 20;
-  motor.PID_velocity.D = 0;
-  // maximal voltage to be set to the motor
-  motor.voltage_limit = 3;
-
-  // velocity low pass filtering time constant
-  // the lower the less filtered
-  motor.LPF_velocity.Tf = 0.01f;
-
-  // angle P controller
-  motor.P_angle.P = 8;
-  // maximal velocity of the position control
-  motor.velocity_limit = 10;
-
-  // use monitoring with serial
-  Serial.begin(115200);
-  // comment out if not needed
-  motor.useMonitoring(Serial);
-
-
-  // initialize motor
+  // initialize motor hardware
   motor.init();
-  // align sensor and start FOC
-  motor.initFOC();
+
+  // monitoring port
+  Serial.begin(115200);
+
+  // pole pairs calculation routine
+  Serial.println("Pole pairs (PP) estimator");
+  Serial.println("-\n");
+
+  float pp_search_voltage = 4; // maximum power_supply_voltage/2
+  float pp_search_angle = 6*_PI; // search electrical angle to turn
+
+  // move motor to the electrical angle 0
+  motor.controller = MotionControlType::angle_openloop;
+  motor.voltage_limit=pp_search_voltage;
+  motor.move(0);
+  _delay(1000);
+  // read the sensor angle
+  sensor.update();
+  float angle_begin = sensor.getAngle();
+  _delay(50);
+
+  // move the motor slowly to the electrical angle pp_search_angle
+  float motor_angle = 0;
+  while(motor_angle <= pp_search_angle){
+    motor_angle += 0.01f;
+    sensor.update(); // keep track of the overflow
+    motor.move(motor_angle);
+    _delay(1);
+  }
+  _delay(1000);
+  // read the sensor value for 180
+  sensor.update(); 
+  float angle_end = sensor.getAngle();
+  _delay(50);
+  // turn off the motor
+  motor.move(0);
+  _delay(1000);
+
+  // calculate the pole pair number
+  int pp = round((pp_search_angle)/(angle_end-angle_begin));
+
+  Serial.print(F("Estimated PP : "));
+  Serial.println(pp);
+  Serial.println(F("PP = Electrical angle / Encoder angle "));
+  Serial.print(pp_search_angle*180/_PI);
+  Serial.print(F("/"));
+  Serial.print((angle_end-angle_begin)*180/_PI);
+  Serial.print(F(" = "));
+  Serial.println((pp_search_angle)/(angle_end-angle_begin));
+  Serial.println();
+
+
+  // a bit of monitoring the result
+  if(pp <= 0 ){
+    Serial.println(F("PP number cannot be negative"));
+    Serial.println(F(" - Try changing the search_voltage value or motor/sensor configuration."));
+    return;
+  }else if(pp > 30){
+    Serial.println(F("PP number very high, possible error."));
+  }else{
+    Serial.println(F("If PP is estimated well your motor should turn now!"));
+    Serial.println(F(" - If it is not moving try to relaunch the program!"));
+    Serial.println(F(" - You can also try to adjust the target voltage using serial terminal!"));
+  }
+
 
   // add target command T
-  command.add('T', doTarget, "target angle");
+  command.add('T', doTarget, "target voltage");
 
-  Serial.println(F("Motor ready."));
-  Serial.println(F("Set the target angle using serial terminal (Degrees):"));
+  // set motion control loop to be used
+  motor.controller = MotionControlType::torque;
+  // set the pole pair number to the motor
+  motor.pole_pairs = pp;
+  //align sensor and start FOC
+  motor.initFOC();
   _delay(1000);
-}
 
+  Serial.println(F("\n Motor ready."));
+  Serial.println(F("Set the target voltage using serial terminal:"));
+}
 
 void loop() {
 
@@ -98,13 +137,10 @@ void loop() {
   // velocity, position or voltage (defined in motor.controller)
   // this function can be run at much lower frequency than loopFOC() function
   // You can also use motor.move() and set the motor.target in the code
-  motor.move(target_angle * (_PI/180)); // Use degrees instead of radians
-
-
-  // function intended to be used with serial plotter to monitor motor variables
-  // significantly slowing the execution down!!!!
-  // motor.monitor();
+  motor.move(target_voltage);
 
   // user communication
   command.run();
 }
+
+
