@@ -16,3 +16,6 @@ Setup the following commands:
 - M - Set mode (0 = velocity, 1 = position)
 - L - Set voltage limit
 - S - Set speed limit
+
+## Test 4 - Position Closed Loop
+For the gimbal motor I set `motor.P_angle.P = 8`.  

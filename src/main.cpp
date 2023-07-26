@@ -13,6 +13,7 @@
 // MagneticSensorSPI sensor = MagneticSensorSPI(AS5147_SPI, 10);
 // magnetic sensor instance - MagneticSensorI2C
 MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C);
+
 // magnetic sensor instance - analog output
 // MagneticSensorAnalog sensor = MagneticSensorAnalog(A1, 14, 1020);
 
@@ -54,16 +55,16 @@ void setup() {
   motor.PID_velocity.I = 20;
   motor.PID_velocity.D = 0;
   // maximal voltage to be set to the motor
-  motor.voltage_limit = 6;
+  motor.voltage_limit = 3;
 
   // velocity low pass filtering time constant
   // the lower the less filtered
   motor.LPF_velocity.Tf = 0.01f;
 
   // angle P controller
-  motor.P_angle.P = 20;
+  motor.P_angle.P = 8;
   // maximal velocity of the position control
-  motor.velocity_limit = 20;
+  motor.velocity_limit = 10;
 
   // use monitoring with serial
   Serial.begin(115200);
@@ -80,7 +81,7 @@ void setup() {
   command.add('T', doTarget, "target angle");
 
   Serial.println(F("Motor ready."));
-  Serial.println(F("Set the target angle using serial terminal:"));
+  Serial.println(F("Set the target angle using serial terminal (Degrees):"));
   _delay(1000);
 }
 
@@ -97,7 +98,7 @@ void loop() {
   // velocity, position or voltage (defined in motor.controller)
   // this function can be run at much lower frequency than loopFOC() function
   // You can also use motor.move() and set the motor.target in the code
-  motor.move(target_angle);
+  motor.move(target_angle * (_PI/180)); // Use degrees instead of radians
 
 
   // function intended to be used with serial plotter to monitor motor variables
